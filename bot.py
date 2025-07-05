@@ -4,6 +4,7 @@ from config import *
 from store import *
 import requests
 import urllib.parse
+from store import get_valid_token
 
 def start(update: Update, context: CallbackContext):
     update.message.reply_text("👋 Welcome to PlaySpotify!\nUse /login to connect your Spotify.")
@@ -28,24 +29,27 @@ def logout(update: Update, context: CallbackContext):
     delete_token(user_id)
     update.message.reply_text("🚪 Logged out from Spotify.")
 
+from store import get_valid_token
+
+@bot.command("mytrack")
 def mytrack(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
-    token_data = get_token(user_id)
-    if not token_data:
-        update.message.reply_text("❌ Not logged in. Use /login")
-        return
+    access_token = get_valid_token(user_id)
 
-    headers = {"Authorization": f"Bearer {token_data['access_token']}"}
-    res = requests.get("https://api.spotify.com/v1/me/player/currently-playing", headers=headers)
-
-    if res.status_code != 200:
+    if not access_token:
         update.message.reply_text("⚠️ Could not fetch track. Try re-logging.")
         return
 
-    data = res.json()
-    track = data['item']['name']
-    artist = data['item']['artists'][0]['name']
-    update.message.reply_text(f"🎵 Now playing:\n*{track}* by *{artist}*", parse_mode="Markdown")
+    headers = {"Authorization": f"Bearer {access_token}"}
+    r = requests.get("https://api.spotify.com/v1/me/player/currently-playing", headers=headers)
+
+    if r.status_code == 200:
+        data = r.json()
+        name = data["item"]["name"]
+        artist = data["item"]["artists"][0]["name"]
+        update.message.reply_text(f"🎵 You're listening to: *{name}* by *{artist}*", parse_mode="Markdown")
+    else:
+        update.message.reply_text("⚠️ Nothing is playing right now.")
 
 def setcookie(update: Update, context: CallbackContext):
     if not context.args:
