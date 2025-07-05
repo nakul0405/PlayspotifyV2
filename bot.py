@@ -44,7 +44,7 @@ def logout(update: Update, context: CallbackContext):
     else:
         update.message.reply_text("❌ Token store not found.")
 
-# ------------------ /mytrack (DEBUG ENABLED) ------------------ #
+# ------------------ /mytrack (DEBUG + 429 HANDLING) ------------------ #
 def mytrack(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     print(f"[DEBUG] /mytrack called by user {user_id}")
@@ -70,13 +70,26 @@ def mytrack(update: Update, context: CallbackContext):
             if data.get("is_playing"):
                 track_name = data["item"]["name"]
                 artist_name = data["item"]["artists"][0]["name"]
-                update.message.reply_text(f"🎧 Now playing: *{track_name}* by *{artist_name}*", parse_mode="Markdown")
+                update.message.reply_text(
+                    f"🎧 Now playing:\n*{track_name}* by *{artist_name}*",
+                    parse_mode="Markdown"
+                )
             else:
                 update.message.reply_text("😴 Nothing is playing right now. (Spotify says not playing)")
+
         elif r.status_code == 204:
             update.message.reply_text("😶 Nothing is currently playing. (Spotify returned 204)")
+
+        elif r.status_code == 429:
+            retry_after = int(r.headers.get("Retry-After", 10))
+            update.message.reply_text(
+                f"⏳ Too many requests.\nPlease try again after *{retry_after} seconds*.",
+                parse_mode="Markdown"
+            )
+
         elif r.status_code == 401:
             update.message.reply_text("🔑 Token expired or invalid. Try /login again.")
+
         else:
             update.message.reply_text(f"⚠️ Unexpected response ({r.status_code}) from Spotify.")
 
@@ -107,6 +120,7 @@ def friends(update: Update, context: CallbackContext):
     headers = {
         "cookie": f"sp_dc={sp_dc}"
     }
+
     try:
         r = requests.get("https://guc-spclient.spotify.com/presence-view/v1/buddylist", headers=headers)
         print(f"[DEBUG] Friends status code: {r.status_code}")
@@ -126,6 +140,7 @@ def friends(update: Update, context: CallbackContext):
             msg += f"- *{name}*: {track} – {artist}\n"
 
         update.message.reply_text(msg, parse_mode="Markdown")
+
     except Exception as e:
         print(f"[ERROR] Exception in /friends: {e}")
         update.message.reply_text("❌ Failed to fetch friends activity.")
