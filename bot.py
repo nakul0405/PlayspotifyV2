@@ -2,6 +2,7 @@ from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 import os
 import requests
+import json
 from config import BOT_TOKEN, SPOTIFY_CLIENT_ID, SPOTIFY_REDIRECT_URI, ADMIN_ID
 from store import get_valid_token, save_cookie, get_cookie, load_tokens
 
@@ -43,25 +44,45 @@ def logout(update: Update, context: CallbackContext):
     else:
         update.message.reply_text("❌ Token store not found.")
 
-# ------------------ /mytrack ------------------ #
+# ------------------ /mytrack (DEBUG ENABLED) ------------------ #
 def mytrack(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
+    print(f"[DEBUG] /mytrack called by user {user_id}")
+
     access_token = get_valid_token(user_id)
+    print(f"[DEBUG] Access token: {access_token}")
 
     if not access_token:
-        update.message.reply_text("⚠️ Could not fetch track. Try /login again.")
+        update.message.reply_text("⚠️ Could not fetch token. Try /login again.")
         return
 
-    headers = {"Authorization": f"Bearer {access_token}"}
-    r = requests.get("https://api.spotify.com/v1/me/player/currently-playing", headers=headers)
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
 
-    if r.status_code == 200 and r.json().get("is_playing"):
-        data = r.json()
-        name = data["item"]["name"]
-        artist = data["item"]["artists"][0]["name"]
-        update.message.reply_text(f"🎵 You're listening to: *{name}* by *{artist}*", parse_mode="Markdown")
-    else:
-        update.message.reply_text("😴 Nothing is playing right now.")
+    try:
+        r = requests.get("https://api.spotify.com/v1/me/player/currently-playing", headers=headers)
+        print(f"[DEBUG] Spotify API status: {r.status_code}")
+        print(f"[DEBUG] Spotify response: {r.text}")
+
+        if r.status_code == 200:
+            data = r.json()
+            if data.get("is_playing"):
+                track_name = data["item"]["name"]
+                artist_name = data["item"]["artists"][0]["name"]
+                update.message.reply_text(f"🎧 Now playing: *{track_name}* by *{artist_name}*", parse_mode="Markdown")
+            else:
+                update.message.reply_text("😴 Nothing is playing right now. (Spotify says not playing)")
+        elif r.status_code == 204:
+            update.message.reply_text("😶 Nothing is currently playing. (Spotify returned 204)")
+        elif r.status_code == 401:
+            update.message.reply_text("🔑 Token expired or invalid. Try /login again.")
+        else:
+            update.message.reply_text(f"⚠️ Unexpected response ({r.status_code}) from Spotify.")
+
+    except Exception as e:
+        print(f"[ERROR] Exception in /mytrack: {e}")
+        update.message.reply_text("❌ Error while fetching track info.")
 
 # ------------------ /setcookie <cookie> ------------------ #
 def setcookie(update: Update, context: CallbackContext):
@@ -88,6 +109,9 @@ def friends(update: Update, context: CallbackContext):
     }
     try:
         r = requests.get("https://guc-spclient.spotify.com/presence-view/v1/buddylist", headers=headers)
+        print(f"[DEBUG] Friends status code: {r.status_code}")
+        print(f"[DEBUG] Friends response: {r.text}")
+
         data = r.json()
 
         if not data.get("friends"):
@@ -103,8 +127,8 @@ def friends(update: Update, context: CallbackContext):
 
         update.message.reply_text(msg, parse_mode="Markdown")
     except Exception as e:
+        print(f"[ERROR] Exception in /friends: {e}")
         update.message.reply_text("❌ Failed to fetch friends activity.")
-        print("[ERROR]", e)
 
 # ------------------ /onlyforadmin ------------------ #
 def onlyforadmin(update: Update, context: CallbackContext):
