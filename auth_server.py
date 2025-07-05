@@ -1,7 +1,9 @@
+# auth_server.py
 from flask import Flask, request
 import requests
 from config import *
 from store import save_token
+import os
 
 app = Flask(__name__)
 
@@ -27,3 +29,7 @@ def callback():
         save_token(user_id, token_data)
         return "✅ Login successful! You can go back to Telegram."
     return "❌ Failed to get token."
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))  # 👈 REQUIRED
+    app.run(host="0.0.0.0", port=port)         # 👈 REQUIRED
